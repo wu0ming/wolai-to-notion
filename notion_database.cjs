@@ -95,6 +95,29 @@ function sameProperty(value, expected) {
   return normalize(value) === normalize(expected);
 }
 
+// Imported property tables can contain a percent-encoded copy of the original
+// malformed link. Only collapse it when the full destination and label agree.
+function sameExportedLink(source, rendered) {
+  if (typeof source !== "string" || typeof rendered !== "string") return false;
+  const s = source.match(/^\[([^\]\n]*)\]\((?:<([^>]*)>|([^\s]+?)) "([^"]*)"\)$/);
+  const r = rendered.match(/^\[([^\]\n]*)\]\((?:<([^>]*)>|(.+))\)$/);
+  if (!s || !r) return false;
+  const original = s[2] ?? s[3], target = r[2] ?? r[3];
+  if (/^https?:\/\/\S+$/i.test(original)) return false;
+  let decoded;
+  try { decoded = decodeURIComponent(target); } catch { return false; }
+  if (decoded !== original || s[4] !== s[1].replace(/\\([*_&])/g, "$1") && s[4] !== s[1]) return false;
+  const compact = s => s.replace(/[ \t]+/g, " ");
+  if (compact(s[1]) === compact(r[1])) return true;
+  // Some legacy imports shortened the displayed UNC path while preserving its
+  // full destination. Match the host and every displayed segment in order.
+  if (!s[1].includes("\\\\") || !r[1].includes("\\\\")) return false;
+  const all = s[1].split(/\\+/).filter(Boolean), shown = r[1].split(/\\+/).filter(Boolean);
+  if (shown.length < 3 || shown[0] !== all[0] || shown[1] !== all[1]) return false;
+  let index = 1;
+  return shown.slice(2).every(segment => (index = all.indexOf(segment, index + 1)) >= 0);
+}
+
 function rowPrefix(body, values) {
   const prefix = body.match(/^\|[^\n]*(?:\n\|[^\n]*)*/)?.[0];
   if (!prefix) return null;
@@ -108,7 +131,7 @@ function rowPrefix(body, values) {
   const rendered = value => typeof value === "string" && !/\x60|<code\b|<pre\b/i.test(value)
     ? value.replace(/[ \t]+/g, " ") : value;
   return pairs.every(([key, val, ...rest]) =>
-    !rest.length && Object.hasOwn(values, key) && sameProperty(rendered(values[key]), rendered(val))
+    !rest.length && Object.hasOwn(values, key) && (sameProperty(rendered(values[key]), rendered(val)) || sameExportedLink(values[key], val))
   ) ? prefix : null;
 }
 
