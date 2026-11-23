@@ -68,7 +68,8 @@ function sameProperty(value, expected) {
     return Array.isArray(list) && JSON.stringify([...list].sort()) === JSON.stringify([...expected].sort());
   }
   if (expected == null) return value == null || value === "";
-  return value === expected;
+  const normalize = s=>s==null?'':typeof s!=='string'?s:s.replace(/&#x0*d;|&#13;|\r/gi,'\n').trim();
+  return normalize(value) === normalize(expected);
 }
 
 function rowPrefix(body, values) {
