@@ -52,4 +52,6 @@ test("normalize exported URL fields without swallowing informative tooltips", ()
     "[https://example.org/a](https://example.org/a) [https://example.org/b](https://example.org/b)");
   assert.equal(convert('[Label](https://example.org "tooltip with extra detail")'), '[Label](https://example.org "tooltip with extra detail")');
   assert.equal(sameProperty("A&B<br />C", "A\\&B&#xA;C"), true);
+  assert.equal(sameProperty("<code>a  b</code>", "`a  b`"), true);
+  assert.equal(sameProperty("<code>a  b</code>", "`a b`"), false);
 });
