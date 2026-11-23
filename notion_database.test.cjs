@@ -32,3 +32,12 @@ test("the database sum retains its verified filter",()=>{
   assert.equal(numberView({kind:"sum",title:"Y",property:"Cost"},'FILTER "Year" = "2024"').configure,
     'FILTER "Year" = "2024"; CHART number AGGREGATE sum ON "Cost"');
 });
+
+test("compact HTML whitespace only in rendered property prose", () => {
+  const {rowPrefix} = require("./notion_database.cjs");
+  const table = "| Note | One <i><b>two</b></i> |\n| --- | --- |";
+  assert.equal(rowPrefix(table, {Note: "One  ***two***"}), table);
+  const code = "| Note | `a b` |\n| --- | --- |";
+  assert.equal(rowPrefix(code, {Note: "`a  b`"}), null);
+  assert.equal(rowPrefix(table, {Note: "One  three"}), null);
+});
