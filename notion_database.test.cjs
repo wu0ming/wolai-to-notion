@@ -21,3 +21,14 @@ test("native zero, missing amounts and date ranges survive independently",()=>{
   const got=fieldValues({values:{A:"0",B:"",Time:"2024/01/02 → 2024/01/04"}},{A:"number",B:"number",Time:"date"});
   assert.deepEqual(got,{A:0,B:null,"date:Time:start":"2024-01-02","date:Time:is_datetime":0,"date:Time:end":"2024-01-04"});
 });
+
+test("Notion rich text and exported carriage returns compare semantically",()=>{
+  const {sameProperty}=require("./notion_database.cjs");
+  assert.ok(sameProperty("A<i><b>B</b></i>", "A***B***&#xD;"));
+  assert.equal(sameProperty("A","B"),false);
+});
+test("the database sum retains its verified filter",()=>{
+  const {numberView}=require("./notion_database.cjs");
+  assert.equal(numberView({kind:"sum",title:"Y",property:"Cost"},'FILTER "Year" = "2024"').configure,
+    'FILTER "Year" = "2024"; CHART number AGGREGATE sum ON "Cost"');
+});

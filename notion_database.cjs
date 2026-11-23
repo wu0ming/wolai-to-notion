@@ -68,7 +68,7 @@ function sameProperty(value, expected) {
     return Array.isArray(list) && JSON.stringify([...list].sort()) === JSON.stringify([...expected].sort());
   }
   if (expected == null) return value == null || value === "";
-  const normalize = s=>s==null?'':typeof s!=='string'?s:s.replace(/&#x0*d;|&#13;|\r/gi,'\n').trim();
+  const normalize = s=>typeof s!=="string"?(s??""):s.replace(/&#x0*d;|&#13;|\r/gi,"\n").replace(/<br\s*\/?>/gi,"\n").replace(/<i><b>(.*?)<\/b><\/i>|<b><i>(.*?)<\/i><\/b>/gs,(_,x,y)=>"***"+(x??y)+"***").replace(/<b>(.*?)<\/b>/gs,"**$1**").replace(/<i>(.*?)<\/i>/gs,"*$1*").replace(/\\([*_])/g,"$1").trim();
   return normalize(value) === normalize(expected);
 }
 
@@ -80,7 +80,7 @@ function rowPrefix(body, values) {
   pairs.splice(1, 1);
   const names = new Set(pairs.map(r=>r[0]));
   if (pairs.length !== names.size || names.size !== Object.keys(values).length) return null;
-  return pairs.every(([key, val, ...rest]) => !rest.length && Object.hasOwn(values, key) && values[key] === val) ? prefix : null;
+  return pairs.every(([key, val, ...rest]) => !rest.length && Object.hasOwn(values, key) && sameProperty(values[key],val)) ? prefix : null;
 }
 
 
@@ -141,4 +141,33 @@ async function populate(api, plan) {
   return targetIds;
 }
 
-module.exports={id,content,props,fieldValues,sameProperty,rowPrefix,matchRows,populate};
+
+// Only edit the verified table and the existing database block. Unrelated blocks and
+// concurrent changes elsewhere in the page are outside the update_content request.
+async function placeNativeTable(api, pageId, tableText, databaseUrl, caption="") {
+  const body=content(await api.fetch(pageId));
+  const blocks=[...body.matchAll(/<database\b[^>]*>[\s\S]*?<\/database>/g)].map(m=>m[0]);
+  const matching=blocks.filter(block=>id(block.match(/url="([^"]+)"/)[1])===id(databaseUrl));
+  if(matching.length!==1)throw Error("Cannot identify a unique database block");
+  const tag=matching[0], inline=tag.replace('inline="false"','inline="true"');
+  if(!body.includes(tableText)){
+    if(tag===inline)return;
+    throw Error("The source table has changed");
+  }
+  if(body.indexOf(tableText)!==body.lastIndexOf(tableText))throw Error("Multiple matching static tables");
+  const titled="#### "+caption+"\n\n"+tableText;
+  const old=caption && body.includes(titled) ? titled : tableText;
+  await api.updateContent(pageId,[{old_str:tag,new_str:""},{old_str:old,new_str:"\n\n"+inline+"\n\n"}]);
+  const saved=content(await api.fetch(pageId));
+  if(saved.includes(tableText)||!saved.includes(inline.split(">")[0]+">"))throw Error("Database placement verification failed");
+}
+
+// Caller resolves the source view IDs against the actual Wolai filters before calling.
+function numberView(metric, filter) {
+  if(metric.kind!=="sum"||!metric.property)throw Error("Expected a database sum");
+  const quote=value=>JSON.stringify(String(value));
+  const aggregation="CHART number AGGREGATE sum ON "+quote(metric.property);
+  return {name:metric.title,type:"chart",configure:filter ? filter+"; "+aggregation : aggregation};
+}
+
+module.exports={id,content,props,fieldValues,sameProperty,rowPrefix,matchRows,populate,placeNativeTable,numberView};
