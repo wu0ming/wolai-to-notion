@@ -55,3 +55,13 @@ test("normalize exported URL fields without swallowing informative tooltips", ()
   assert.equal(sameProperty("<code>a  b</code>", "`a  b`"), true);
   assert.equal(sameProperty("<code>a  b</code>", "`a b`"), false);
 });
+
+test("decoded destinations and visible labels must both agree before metadata cleanup", () => {
+  const {rowPrefix}=require("./notion_database.cjs");
+  const source={ Link: '[plain words](<plain words> "plain words")' };
+  const table = val => "| Link | " + val + " |\n| --- | --- |";
+  const valid = table("[plain words](<plain%20words>)");
+  assert.equal(rowPrefix(valid,source),valid);
+  assert.equal(rowPrefix(table("[other words](<plain%20words>)"),source),null);
+  assert.equal(rowPrefix(table("[plain words](<other%20words>)"),source),null);
+});
