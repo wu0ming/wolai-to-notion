@@ -84,6 +84,8 @@ function fieldValues(record, types) {
 }
 
 function sameProperty(value, expected) {
+  if (typeof value === "string" && /^<code>[^<]*<\/code>$/.test(value) && typeof expected === "string" && /^`[^`]*`$/.test(expected))
+    return value.slice(6, -7) === expected.slice(1, -1);
   if (Array.isArray(expected)) {
     const list = typeof value === "string" ? JSON.parse(value) : value || [];
     return Array.isArray(list) && JSON.stringify([...list].sort()) === JSON.stringify([...expected].sort());
