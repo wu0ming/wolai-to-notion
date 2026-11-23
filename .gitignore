@@ -1,0 +1,7 @@
+__pycache__/
+*.zip
+*.part
+*.zip.json
+manifest.json
+.env*
+private/
