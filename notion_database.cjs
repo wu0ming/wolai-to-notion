@@ -80,7 +80,13 @@ function rowPrefix(body, values) {
   pairs.splice(1, 1);
   const names = new Set(pairs.map(r=>r[0]));
   if (pairs.length !== names.size || names.size !== Object.keys(values).length) return null;
-  return pairs.every(([key, val, ...rest]) => !rest.length && Object.hasOwn(values, key) && sameProperty(values[key],val)) ? prefix : null;
+  // HTML collapses horizontal whitespace in ordinary prose. Keep code and line
+  // breaks exact, and still require an exact field-name set and value match.
+  const rendered = value => typeof value === "string" && !/\x60|<code\b|<pre\b/i.test(value)
+    ? value.replace(/[ \t]+/g, " ") : value;
+  return pairs.every(([key, val, ...rest]) =>
+    !rest.length && Object.hasOwn(values, key) && sameProperty(rendered(values[key]), rendered(val))
+  ) ? prefix : null;
 }
 
 
