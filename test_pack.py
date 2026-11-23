@@ -6,6 +6,25 @@ from zipfile import ZipFile
 from pack_export import pack
 
 class PackTests(unittest.TestCase):
+    def test_recursive_mode_follows_children_and_links_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            parents = {"root":None, "linked":None, "child":"linked", "extra":None, "unrelated":None}
+            texts = {"root":"[link](linked.md)", "linked":"body", "child":"[outside](https://www.wolai.com/extra)",
+                     "extra":"[cycle](root.md)", "unrelated":"other"}
+            manifest = [{"wolai_id":s, "source":s+".md", "title":s, "parent_id":p} for s,p in parents.items()]
+            (base/"manifest").write_text(json.dumps(manifest), encoding="utf8")
+            with ZipFile(base/"source.zip", "w") as z:
+                for sid, text in texts.items():
+                    z.writestr(sid+".md", "# "+sid+"\n\n"+text)
+            def run(name, **kwargs):
+                return pack(base/"source.zip", base/"manifest", "root", base/name, **kwargs)["pages"]
+            self.assertEqual(set(run("direct.zip", include_references=True)), {"root","linked"})
+            pages = run("recursive.zip", recursive_references=True)
+            self.assertEqual(set(pages), {"root","linked","child","extra"})
+            self.assertEqual(pages["child"]["parent"], "linked")
+            self.assertFalse(pages["extra"]["direct_reference"])
+
     def test_scope_and_original_bytes(self):
         with tempfile.TemporaryDirectory() as tmp:
             base=Path(tmp)

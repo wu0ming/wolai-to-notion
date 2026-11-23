@@ -12,7 +12,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from markdown_links import refs, blocks
 
 
-def pack(archive, manifest, root, destination, include_references=False):
+def pack(archive, manifest, root, destination, include_references=False, recursive_references=False):
     document = json.loads(Path(manifest).read_text(encoding="utf-8-sig"))
     records = document["pages"] if isinstance(document, dict) else document
     pages = {p["wolai_id"]: p for p in records}
@@ -43,6 +43,9 @@ def pack(archive, manifest, root, destination, include_references=False):
                 if kind == "代码块":
                     continue
                 for start, end, image, label, href in reversed(list(refs(text))):
+                    wolai = re.fullmatch(r"https?://(?:www\.)?wolai\.com/([A-Za-z0-9_-]+)/?(?:[?#].*)?", href)
+                    if wolai and wolai[1] in pages:
+                        found.add(wolai[1])
                     if re.match(r"^(?:[A-Za-z][\w+.-]*:|//|#)", href):
                         continue
                     path = posixpath.normpath(posixpath.join(posixpath.dirname(p["source"]), unquote(href)))
@@ -64,10 +67,16 @@ def pack(archive, manifest, root, destination, include_references=False):
             links[sid] = found
         for sid in sorted(tree):
             convert(sid)
-        if include_references:
-            external = set().union(*(links[s] for s in tree)) - tree
-            for sid in sorted(external):
-                convert(sid)
+        direct = set().union(*(links[s] for s in tree)) - tree
+        if include_references or recursive_references:
+            pending = set(direct)
+            while pending:
+                current = sorted(pending - articles.keys())
+                pending.clear()
+                for sid in current:
+                    convert(sid)
+                    if recursive_references:
+                        pending.update(links[sid] | set(children[sid]))
         output = Path(destination)
         if output.exists():
             raise FileExistsError(output)
@@ -89,7 +98,7 @@ def pack(archive, manifest, root, destination, include_references=False):
                 if (original.file_size,original.CRC)!=(copy.file_size,copy.CRC):
                     raise ValueError("Changed resource: "+origin)
         temporary.replace(output)
-    return {"pages":{s:{"title":pages[s]["title"],"parent":pages[s]["parent_id"],"direct_reference":s not in tree} for s in articles},
+    return {"pages":{s:{"title":pages[s]["title"],"parent":pages[s]["parent_id"],"direct_reference":s in direct} for s in articles},
             "resources":len(media),"resource_paths":media,"unresolved":unresolved}
 
 
@@ -98,7 +107,9 @@ if __name__ == "__main__":
     for key in ("archive","manifest","root","output"):
         parser.add_argument(key)
     parser.add_argument("--include-references",action="store_true")
+    parser.add_argument("--recursive-references", action="store_true",
+                        help="Include linked pages, their descendants and further in-export links until all are covered")
     args=parser.parse_args()
-    result=pack(args.archive,args.manifest,args.root,args.output,args.include_references)
+    result=pack(args.archive,args.manifest,args.root,args.output,args.include_references,args.recursive_references)
     Path(args.output+".json").write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
     print(len(result["pages"]),"pages;",result["resources"],"resources;",len(result["unresolved"]),"unresolved references")
