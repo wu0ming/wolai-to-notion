@@ -41,3 +41,15 @@ test("compact HTML whitespace only in rendered property prose", () => {
   assert.equal(rowPrefix(code, {Note: "`a  b`"}), null);
   assert.equal(rowPrefix(table, {Note: "One  three"}), null);
 });
+
+test("normalize exported URL fields without swallowing informative tooltips", () => {
+  const {fieldValues, sameProperty} = require("./notion_database.cjs");
+  const convert = s => fieldValues({values:{Link:s}}, {Link:"text"}).Link;
+  assert.equal(convert('[Label](https://example.org "https://example.org")'), '[Label](https://example.org)');
+  assert.equal(convert('[Words only](<Words only> "Words only")'), 'Words only');
+  const urls = "https://example.org/a  https://example.org/b";
+  assert.equal(convert("[" + urls + "](<" + urls + '> "' + urls + '")'),
+    "[https://example.org/a](https://example.org/a) [https://example.org/b](https://example.org/b)");
+  assert.equal(convert('[Label](https://example.org "tooltip with extra detail")'), '[Label](https://example.org "tooltip with extra detail")');
+  assert.equal(sameProperty("A&B<br />C", "A\\&B&#xA;C"), true);
+});
