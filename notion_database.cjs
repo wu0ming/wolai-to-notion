@@ -16,6 +16,25 @@ function props(page) {
   return JSON.parse(page.text.match(/<properties>\s*([\s\S]*?)\s*<\/properties>/)[1]);
 }
 
+// Wolai exports a text-valued URL field as one Markdown link, including
+// prose, empty dash placeholders, and multiple URLs pasted into one cell.
+function exportText(value) {
+  if (typeof value !== "string") return value;
+  const match = value.match(/^\[([^\]\n]*)\]\((?:<([^>]*)>|([^\s]+?))(?: "([^"]*)")?\)$/);
+  if (!match) return value;
+  const unescape = s => s.replace(/\\([&*_])/g, "$1");
+  const [, label, angled, bare, tooltip] = match;
+  const visible = unescape(label), target = unescape(angled ?? bare);
+  if (tooltip !== undefined && unescape(tooltip) !== visible && unescape(tooltip) !== target) return value;
+  const urls = visible.trim().split(/\s+/);
+  if (urls.length > 1 && urls.every(s => /^https?:\/\/[^\s]+$/.test(s)) && visible === target)
+    return urls.map(url => "[" + url + "](" + url + ")").join(" ");
+  if (/^https?:\/\/[^\s]+$/.test(target)) return "[" + label + "](" + target + ")";
+  if (tooltip !== undefined && unescape(tooltip) === visible && (!target || visible === target || visible.includes("\\") && target.includes("\\")))
+    return visible.includes("\\") ? "\x60" + visible + "\x60" : label;
+  return value;
+}
+
 function fieldValues(record, types) {
   const result = {};
   for (const [name, raw] of Object.entries(record.values)) {
@@ -52,6 +71,8 @@ function fieldValues(record, types) {
         break;
       }
       case "text":
+        result[name] = exportText(raw) || null;
+        break;
       case "select":
         result[name] = raw || null;
         break;
@@ -68,7 +89,7 @@ function sameProperty(value, expected) {
     return Array.isArray(list) && JSON.stringify([...list].sort()) === JSON.stringify([...expected].sort());
   }
   if (expected == null) return value == null || value === "";
-  const normalize = s=>typeof s!=="string"?(s??""):s.replace(/&#x0*d;|&#13;|\r/gi,"\n").replace(/<br\s*\/?>/gi,"\n").replace(/<i><b>(.*?)<\/b><\/i>|<b><i>(.*?)<\/i><\/b>/gs,(_,x,y)=>"***"+(x??y)+"***").replace(/<b>(.*?)<\/b>/gs,"**$1**").replace(/<i>(.*?)<\/i>/gs,"*$1*").replace(/\\([*_])/g,"$1").trim();
+  const normalize = s=>typeof s!=="string"?(s??""):exportText(s).replace(/&#x0*[ad];|&#(?:10|13);|\r/gi,"\n").replace(/<br\s*\/?>/gi,"\n").replace(/<i><b>(.*?)<\/b><\/i>|<b><i>(.*?)<\/i><\/b>/gs,(_,x,y)=>"***"+(x??y)+"***").replace(/<b>(.*?)<\/b>/gs,"**$1**").replace(/<i>(.*?)<\/i>/gs,"*$1*").replace(/\\([&*_])/g,"$1").trim();
   return normalize(value) === normalize(expected);
 }
 
